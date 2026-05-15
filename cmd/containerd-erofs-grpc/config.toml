@@ -1,0 +1,24 @@
+# Default example config for containerd-erofs-grpc.
+# Start with:
+#   containerd-erofs-grpc --config /path/to/config.toml
+
+[snapshotter]
+root = "/var/lib/containerd-erofs/snapshotter"
+address = "/run/containerd-erofs-grpc/containerd-erofs-grpc.sock"
+immutable = false
+
+[containerd]
+address = "/run/containerd/containerd.sock"
+
+[registry]
+docker_config = ""
+
+[daemon]
+mode = "eager"
+
+[daemon.lazyd]
+lazyd_binary = ""
+lazyd_address = "/run/lazyd/lazyd.sock"
+
+[log]
+level = "info"

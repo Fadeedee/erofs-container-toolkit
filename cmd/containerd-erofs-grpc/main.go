@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -24,6 +25,7 @@ import (
 	snapshot "github.com/containerd/containerd/v2/plugins/snapshots/erofs"
 	"github.com/containerd/log"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/pelletier/go-toml/v2"
 	"google.golang.org/grpc"
 
 	erofsgrpc "github.com/erofs/erofs-container-toolkit/pkg/containerd-erofs-grpc"
@@ -31,42 +33,174 @@ import (
 	"github.com/erofs/erofs-container-toolkit/pkg/containerd-erofs-grpc/daemon"
 )
 
-var (
-	rootDir        = flag.String("root", "/var/lib/containerd-erofs/snapshotter", "EROFS snapshotter root directory")
-	sockAddr       = flag.String("addr", "/run/containerd-erofs-grpc/containerd-erofs-grpc.sock", "Socket path to listen on")
-	containerdAddr = flag.String("containerd-addr", "/run/containerd/containerd.sock", "Address for containerd's GRPC server")
-	dockerConfig   = flag.String("docker-config", "", "Optional Docker config directory or config.json path used for registry credentials")
-	daemonMode     = flag.String("daemon-mode", "eager", "Daemon implementation to use: eager, lazyd")
-	lazydBinary    = flag.String("lazyd-binary", "", "Path to lazyd binary when -daemon-mode=lazyd")
-	lazydAddr      = flag.String("lazyd-addr", "/run/lazyd/lazyd.sock", "Socket path used by lazyd when -daemon-mode=lazyd")
-	logLevel       = flag.String("log-level", "info", "Log level: trace, debug, info, warn, error, fatal, panic")
-	immutable      = flag.Bool("immutable", false, "Set IMMUTABLE_FL on EROFS layer blobs (default false for performance)")
+const (
+	defaultRootDir        = "/var/lib/containerd-erofs/snapshotter"
+	defaultSockAddr       = "/run/containerd-erofs-grpc/containerd-erofs-grpc.sock"
+	defaultContainerdAddr = "/run/containerd/containerd.sock"
+	defaultDaemonMode     = "eager"
+	defaultLazydAddr      = "/run/lazyd/lazyd.sock"
+	defaultLogLevel       = "info"
 )
 
+type serverConfig struct {
+	Snapshotter snapshotterConfig `toml:"snapshotter"`
+	Containerd  containerdConfig  `toml:"containerd"`
+	Registry    registryConfig    `toml:"registry"`
+	Daemon      daemonConfig      `toml:"daemon"`
+	Log         logConfig         `toml:"log"`
+}
+
+type snapshotterConfig struct {
+	Root      string `toml:"root"`
+	Address   string `toml:"address"`
+	Immutable bool   `toml:"immutable"`
+}
+
+type containerdConfig struct {
+	Address string `toml:"address"`
+}
+
+type registryConfig struct {
+	DockerConfig string `toml:"docker_config"`
+}
+
+type daemonConfig struct {
+	Mode  string      `toml:"mode"`
+	Lazyd lazydConfig `toml:"lazyd"`
+}
+
+type lazydConfig struct {
+	LazydBinary  string `toml:"lazyd_binary"`
+	LazydAddress string `toml:"lazyd_address"`
+}
+
+type logConfig struct {
+	Level string `toml:"level"`
+}
+
+type cliFlags struct {
+	configPath *string
+}
+
 func main() {
+	cli := registerFlags(flag.CommandLine)
 	flag.Parse()
 
-	if err := log.SetLevel(*logLevel); err != nil {
+	cfg := defaultServerConfig()
+	if *cli.configPath != "" {
+		if err := loadServerConfig(*cli.configPath, &cfg); err != nil {
+			fmt.Printf("error: load config: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	if err := applyFlagOverrides(flag.CommandLine, &cfg); err != nil {
+		fmt.Printf("error: parse flags: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := log.SetLevel(cfg.Log.Level); err != nil {
 		fmt.Printf("error: set log level: %v\n", err)
 		os.Exit(1)
 	}
 	log.L.WithFields(log.Fields{
-		"root":            *rootDir,
-		"addr":            *sockAddr,
-		"containerd_addr": *containerdAddr,
-		"docker_config":   *dockerConfig,
-		"daemon_mode":     *daemonMode,
-		"immutable":       *immutable,
-		"level":           *logLevel,
+		"root":            cfg.Snapshotter.Root,
+		"addr":            cfg.Snapshotter.Address,
+		"containerd_addr": cfg.Containerd.Address,
+		"docker_config":   cfg.Registry.DockerConfig,
+		"daemon_mode":     cfg.Daemon.Mode,
+		"immutable":       cfg.Snapshotter.Immutable,
+		"level":           cfg.Log.Level,
 	}).Info("Starting containerd-erofs-grpc")
 
-	if err := serve(*containerdAddr, *sockAddr, *rootDir, *immutable); err != nil {
+	if err := serve(cfg); err != nil {
 		fmt.Printf("error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func serve(containerdAddress, address, root string, immutable bool) error {
+func registerFlags(fs *flag.FlagSet) cliFlags {
+	fs.String("root", defaultRootDir, "EROFS snapshotter root directory")
+	fs.String("addr", defaultSockAddr, "Socket path to listen on")
+	fs.String("containerd-addr", defaultContainerdAddr, "Address for containerd's GRPC server")
+	fs.String("docker-config", "", "Optional Docker config directory or config.json path used for registry credentials")
+	fs.String("daemon-mode", defaultDaemonMode, "Daemon implementation to use: eager, lazyd")
+	fs.String("lazyd-binary", "", "Path to lazyd binary when -daemon-mode=lazyd")
+	fs.String("lazyd-addr", defaultLazydAddr, "Socket path used by lazyd when -daemon-mode=lazyd")
+	fs.String("log-level", defaultLogLevel, "Log level: trace, debug, info, warn, error, fatal, panic")
+	fs.Bool("immutable", false, "Set IMMUTABLE_FL on EROFS layer blobs (default false for performance)")
+	return cliFlags{
+		configPath: fs.String("config", "", "Optional TOML config file path"),
+	}
+}
+
+func defaultServerConfig() serverConfig {
+	return serverConfig{
+		Snapshotter: snapshotterConfig{
+			Root:    defaultRootDir,
+			Address: defaultSockAddr,
+		},
+		Containerd: containerdConfig{
+			Address: defaultContainerdAddr,
+		},
+		Daemon: daemonConfig{
+			Mode: defaultDaemonMode,
+			Lazyd: lazydConfig{
+				LazydAddress: defaultLazydAddr,
+			},
+		},
+		Log: logConfig{
+			Level: defaultLogLevel,
+		},
+	}
+}
+
+func loadServerConfig(path string, cfg *serverConfig) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if err := toml.Unmarshal(data, cfg); err != nil {
+		return err
+	}
+	return nil
+}
+
+func applyFlagOverrides(fs *flag.FlagSet, cfg *serverConfig) error {
+	var err error
+	fs.Visit(func(f *flag.Flag) {
+		if err != nil {
+			return
+		}
+		switch f.Name {
+		case "root":
+			cfg.Snapshotter.Root = f.Value.String()
+		case "addr":
+			cfg.Snapshotter.Address = f.Value.String()
+		case "containerd-addr":
+			cfg.Containerd.Address = f.Value.String()
+		case "docker-config":
+			cfg.Registry.DockerConfig = f.Value.String()
+		case "daemon-mode":
+			cfg.Daemon.Mode = f.Value.String()
+		case "lazyd-binary":
+			cfg.Daemon.Lazyd.LazydBinary = f.Value.String()
+		case "lazyd-addr":
+			cfg.Daemon.Lazyd.LazydAddress = f.Value.String()
+		case "log-level":
+			cfg.Log.Level = f.Value.String()
+		case "immutable":
+			cfg.Snapshotter.Immutable, err = strconv.ParseBool(f.Value.String())
+		case "config":
+		}
+	})
+	return err
+}
+
+func serve(cfg serverConfig) error {
+	containerdAddress := cfg.Containerd.Address
+	address := cfg.Snapshotter.Address
+	root := cfg.Snapshotter.Root
+
 	// Prepare the address directory
 	if err := os.MkdirAll(filepath.Dir(address), 0700); err != nil {
 		return err
@@ -95,7 +229,7 @@ func serve(containerdAddress, address, root string, immutable bool) error {
 	diffapi.RegisterDiffServer(rpc, service)
 
 	var opts []snapshot.Opt
-	if immutable {
+	if cfg.Snapshotter.Immutable {
 		opts = append(opts, snapshot.WithImmutable())
 	}
 	baseSnapshotter, err := snapshot.NewSnapshotter(root, opts...)
@@ -103,8 +237,8 @@ func serve(containerdAddress, address, root string, immutable bool) error {
 		return err
 	}
 
-	creds := credentials.NewDockerConfigBackend(*dockerConfig)
-	daemonClient, err := newDaemonClient(*daemonMode)
+	creds := credentials.NewDockerConfigBackend(cfg.Registry.DockerConfig)
+	daemonClient, err := newDaemonClient(cfg.Daemon)
 	if err != nil {
 		return err
 	}
@@ -147,17 +281,17 @@ func serve(containerdAddress, address, root string, immutable bool) error {
 	return rpc.Serve(l)
 }
 
-func newDaemonClient(mode string) (daemon.DaemonClient, error) {
-	switch mode {
+func newDaemonClient(cfg daemonConfig) (daemon.DaemonClient, error) {
+	switch cfg.Mode {
 	case "eager":
 		return daemon.NewEagerDaemon(), nil
 	case "lazyd":
 		return daemon.NewLazyDaemon(daemon.LazyDaemonConfig{
-			Binary: *lazydBinary,
-			Socket: *lazydAddr,
+			Binary: cfg.Lazyd.LazydBinary,
+			Socket: cfg.Lazyd.LazydAddress,
 		})
 	default:
-		return nil, fmt.Errorf("unsupported daemon mode %q", mode)
+		return nil, fmt.Errorf("unsupported daemon mode %q", cfg.Mode)
 	}
 }
 

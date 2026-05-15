@@ -12,6 +12,7 @@ require (
 	github.com/containerd/platforms v1.0.0-rc.1
 	github.com/klauspost/compress v1.18.0
 	github.com/opencontainers/image-spec v1.1.1
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/urfave/cli v1.22.15
 	github.com/urfave/cli/v2 v2.27.6
 	google.golang.org/grpc v1.72.2
@@ -61,7 +62,6 @@ require (
 	github.com/opencontainers/runtime-spec v1.2.1 // indirect
 	github.com/opencontainers/runtime-tools v0.9.1-0.20221107090550-2e043c6bd626 // indirect
 	github.com/opencontainers/selinux v1.12.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/petermattis/goid v0.0.0-20240813172612-4fcff4a6cae7 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect

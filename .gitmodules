@@ -1,0 +1,3 @@
+[submodule "lazyd"]
+	path = lazyd
+	url = https://github.com/SToPire/lazyd

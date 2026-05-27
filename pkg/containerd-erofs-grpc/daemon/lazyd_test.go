@@ -25,7 +25,13 @@ func TestLazyDaemonBindLayerRegistersInstance(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	daemon, err := NewLazyDaemon(LazyDaemonConfig{Binary: "/bin/lazyd", Socket: socket})
+	daemon, err := NewLazyDaemon(LazyDaemonConfig{
+		Binary: "/bin/lazyd",
+		Socket: socket,
+		Fetch: LazyFetchConfig{
+			UnitBytes: 1048576,
+		},
+	})
 	if err != nil {
 		t.Fatalf("create lazy daemon: %v", err)
 	}
@@ -68,6 +74,9 @@ func TestLazyDaemonBindLayerRegistersInstance(t *testing.T) {
 	}
 	if req.body.Auth == nil || req.body.Auth.Username != "user" || req.body.Auth.Secret != "secret" {
 		t.Fatalf("unexpected auth config %#v", req.body.Auth)
+	}
+	if req.body.Fetch.UnitBytes != 1048576 {
+		t.Fatalf("unexpected fetch config %#v", req.body.Fetch)
 	}
 }
 

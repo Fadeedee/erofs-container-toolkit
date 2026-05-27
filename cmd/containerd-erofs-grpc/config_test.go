@@ -27,6 +27,9 @@ mode = "lazyd"
 lazyd_binary = "/usr/bin/lazyd"
 lazyd_address = "/tmp/lazyd.sock"
 
+[daemon.lazyd.fetch]
+unit_bytes = 2097152
+
 [log]
 level = "debug"
 `)
@@ -60,6 +63,9 @@ level = "debug"
 	if cfg.Daemon.Lazyd.LazydAddress != "/tmp/lazyd.sock" {
 		t.Fatalf("lazyd address = %q", cfg.Daemon.Lazyd.LazydAddress)
 	}
+	if cfg.Daemon.Lazyd.Fetch.UnitBytes != 2097152 {
+		t.Fatalf("fetch unit bytes = %d", cfg.Daemon.Lazyd.Fetch.UnitBytes)
+	}
 	if cfg.Log.Level != "debug" {
 		t.Fatalf("log level = %q", cfg.Log.Level)
 	}
@@ -81,6 +87,9 @@ mode = "lazyd"
 [daemon.lazyd]
 lazyd_binary = "/config/lazyd"
 lazyd_address = "/config/lazyd.sock"
+
+[daemon.lazyd.fetch]
+unit_bytes = 2097152
 
 [log]
 level = "debug"
@@ -125,6 +134,9 @@ level = "debug"
 	}
 	if cfg.Daemon.Lazyd.LazydBinary != "/config/lazyd" {
 		t.Fatalf("lazyd binary = %q", cfg.Daemon.Lazyd.LazydBinary)
+	}
+	if cfg.Daemon.Lazyd.Fetch.UnitBytes != 2097152 {
+		t.Fatalf("fetch unit bytes = %d", cfg.Daemon.Lazyd.Fetch.UnitBytes)
 	}
 	if cfg.Log.Level != "warn" {
 		t.Fatalf("log level = %q", cfg.Log.Level)

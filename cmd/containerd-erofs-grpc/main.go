@@ -39,6 +39,7 @@ const (
 	defaultContainerdAddr = "/run/containerd/containerd.sock"
 	defaultDaemonMode     = "eager"
 	defaultLazydAddr      = "/run/lazyd/lazyd.sock"
+	defaultFetchUnitBytes = 1 << 20
 	defaultLogLevel       = "info"
 )
 
@@ -70,8 +71,13 @@ type daemonConfig struct {
 }
 
 type lazydConfig struct {
-	LazydBinary  string `toml:"lazyd_binary"`
-	LazydAddress string `toml:"lazyd_address"`
+	LazydBinary  string      `toml:"lazyd_binary"`
+	LazydAddress string      `toml:"lazyd_address"`
+	Fetch        fetchConfig `toml:"fetch"`
+}
+
+type fetchConfig struct {
+	UnitBytes uint64 `toml:"unit_bytes"`
 }
 
 type logConfig struct {
@@ -146,6 +152,9 @@ func defaultServerConfig() serverConfig {
 			Mode: defaultDaemonMode,
 			Lazyd: lazydConfig{
 				LazydAddress: defaultLazydAddr,
+				Fetch: fetchConfig{
+					UnitBytes: defaultFetchUnitBytes,
+				},
 			},
 		},
 		Log: logConfig{
@@ -289,6 +298,9 @@ func newDaemonClient(cfg daemonConfig) (daemon.DaemonClient, error) {
 		return daemon.NewLazyDaemon(daemon.LazyDaemonConfig{
 			Binary: cfg.Lazyd.LazydBinary,
 			Socket: cfg.Lazyd.LazydAddress,
+			Fetch: daemon.LazyFetchConfig{
+				UnitBytes: cfg.Lazyd.Fetch.UnitBytes,
+			},
 		})
 	default:
 		return nil, fmt.Errorf("unsupported daemon mode %q", cfg.Mode)

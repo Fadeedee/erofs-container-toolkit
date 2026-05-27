@@ -17,11 +17,19 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-const defaultLazydStartTimeout = 10 * time.Second
+const (
+	defaultLazydStartTimeout  = 10 * time.Second
+	defaultLazyFetchUnitBytes = 1 << 20
+)
 
 type LazyDaemonConfig struct {
 	Binary string
 	Socket string
+	Fetch  LazyFetchConfig
+}
+
+type LazyFetchConfig struct {
+	UnitBytes uint64
 }
 
 type LazyDaemon struct {
@@ -48,11 +56,16 @@ type lazydAuthConfig struct {
 	Secret   string `json:"secret"`
 }
 
+type lazydFetchConfig struct {
+	UnitBytes uint64 `json:"unit_bytes,omitempty"`
+}
+
 type lazydInstanceConfig struct {
 	TargetPath string              `json:"target_path"`
 	Blob       lazydBlobDescriptor `json:"blob"`
 	Source     lazydRemoteSource   `json:"source"`
 	Auth       *lazydAuthConfig    `json:"auth,omitempty"`
+	Fetch      lazydFetchConfig    `json:"fetch,omitempty"`
 }
 
 func NewLazyDaemon(cfg LazyDaemonConfig) (*LazyDaemon, error) {
@@ -61,6 +74,9 @@ func NewLazyDaemon(cfg LazyDaemonConfig) (*LazyDaemon, error) {
 	}
 	if cfg.Socket == "" {
 		return nil, fmt.Errorf("lazyd socket is required")
+	}
+	if cfg.Fetch.UnitBytes == 0 {
+		cfg.Fetch.UnitBytes = defaultLazyFetchUnitBytes
 	}
 	return &LazyDaemon{
 		config: cfg,
@@ -158,6 +174,9 @@ func (d *LazyDaemon) BindLayer(ctx context.Context, instanceID string, cfg Remot
 		Source: lazydRemoteSource{
 			Type:     "oci-registry",
 			ImageRef: cfg.ImageRef,
+		},
+		Fetch: lazydFetchConfig{
+			UnitBytes: d.config.Fetch.UnitBytes,
 		},
 	}
 	if cfg.Username != "" || cfg.Secret != "" {

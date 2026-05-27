@@ -20,5 +20,8 @@ mode = "eager"
 lazyd_binary = ""
 lazyd_address = "/run/lazyd/lazyd.sock"
 
+[daemon.lazyd.fetch]
+unit_bytes = 1048576
+
 [log]
 level = "info"

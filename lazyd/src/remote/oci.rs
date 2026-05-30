@@ -74,7 +74,7 @@ impl RemoteBackend for OciRemoteBackend {
 fn build_blob_url(image_ref: &str, hosts_dir: Option<&str>, digest: &str) -> Result<Url> {
     let parsed = parse_image_ref(image_ref)?;
     let base = hosts_dir
-        .and_then(|dir| read_hosts_server(dir, &parsed.registry).transpose())
+        .and_then(|dir| read_hosts_server(dir, &parsed.authority).transpose())
         .transpose()?
         .unwrap_or_else(|| parsed.default_base_url());
     let mut url = Url::parse(&base).map_err(|err| Error::BadRequest(err.to_string()))?;
@@ -169,6 +169,30 @@ mod tests {
                 authority: "registry.example.com".to_string(),
                 repository: "ns/image".to_string(),
             }
+        );
+    }
+
+    #[test]
+    fn builds_blob_url_from_hosts_dir_with_registry_port() {
+        let temp = tempfile::tempdir().unwrap();
+        let host_dir = temp.path().join("localhost:5000");
+        std::fs::create_dir_all(&host_dir).unwrap();
+        std::fs::write(
+            host_dir.join("hosts.toml"),
+            r#"server = "http://localhost:5000""#,
+        )
+        .unwrap();
+
+        let url = build_blob_url(
+            "localhost:5000/ns/image:tag",
+            Some(temp.path().to_str().unwrap()),
+            "sha256:abc",
+        )
+        .unwrap();
+
+        assert_eq!(
+            url.as_str(),
+            "http://localhost:5000/v2/ns/image/blobs/sha256:abc"
         );
     }
 

@@ -19,6 +19,7 @@ mode = "eager"
 [daemon.lazyd]
 lazyd_binary = ""
 lazyd_address = "/run/lazyd/lazyd.sock"
+hosts_dir = "/etc/containerd/certs.d"
 
 [daemon.lazyd.fetch]
 unit_bytes = 1048576

@@ -26,8 +26,9 @@ func TestLazyDaemonBindLayerRegistersInstance(t *testing.T) {
 	})
 
 	daemon, err := NewLazyDaemon(LazyDaemonConfig{
-		Binary: "/bin/lazyd",
-		Socket: socket,
+		Binary:   "/bin/lazyd",
+		Socket:   socket,
+		HostsDir: "/tmp/certs.d",
 		Fetch: LazyFetchConfig{
 			UnitBytes: 1048576,
 		},
@@ -71,6 +72,9 @@ func TestLazyDaemonBindLayerRegistersInstance(t *testing.T) {
 	}
 	if req.body.Source.Type != "oci-registry" || req.body.Source.ImageRef != "registry.example.com/ns/image:latest" {
 		t.Fatalf("unexpected source config %#v", req.body.Source)
+	}
+	if req.body.Source.HostsDir != "/tmp/certs.d" {
+		t.Fatalf("unexpected source hosts dir %#v", req.body.Source)
 	}
 	if req.body.Auth == nil || req.body.Auth.Username != "user" || req.body.Auth.Secret != "secret" {
 		t.Fatalf("unexpected auth config %#v", req.body.Auth)

@@ -20,12 +20,14 @@ import (
 const (
 	defaultLazydStartTimeout  = 10 * time.Second
 	defaultLazyFetchUnitBytes = 1 << 20
+	defaultLazyHostsDir       = "/etc/containerd/certs.d"
 )
 
 type LazyDaemonConfig struct {
-	Binary string
-	Socket string
-	Fetch  LazyFetchConfig
+	Binary   string
+	Socket   string
+	HostsDir string
+	Fetch    LazyFetchConfig
 }
 
 type LazyFetchConfig struct {
@@ -49,6 +51,7 @@ type lazydBlobDescriptor struct {
 type lazydRemoteSource struct {
 	Type     string `json:"type"`
 	ImageRef string `json:"image_ref"`
+	HostsDir string `json:"hosts_dir,omitempty"`
 }
 
 type lazydAuthConfig struct {
@@ -77,6 +80,9 @@ func NewLazyDaemon(cfg LazyDaemonConfig) (*LazyDaemon, error) {
 	}
 	if cfg.Fetch.UnitBytes == 0 {
 		cfg.Fetch.UnitBytes = defaultLazyFetchUnitBytes
+	}
+	if cfg.HostsDir == "" {
+		cfg.HostsDir = defaultLazyHostsDir
 	}
 	return &LazyDaemon{
 		config: cfg,
@@ -174,6 +180,7 @@ func (d *LazyDaemon) BindLayer(ctx context.Context, instanceID string, cfg Remot
 		Source: lazydRemoteSource{
 			Type:     "oci-registry",
 			ImageRef: cfg.ImageRef,
+			HostsDir: d.config.HostsDir,
 		},
 		Fetch: lazydFetchConfig{
 			UnitBytes: d.config.Fetch.UnitBytes,

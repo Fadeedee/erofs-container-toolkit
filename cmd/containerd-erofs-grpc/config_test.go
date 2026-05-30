@@ -26,6 +26,7 @@ mode = "lazyd"
 [daemon.lazyd]
 lazyd_binary = "/usr/bin/lazyd"
 lazyd_address = "/tmp/lazyd.sock"
+hosts_dir = "/tmp/certs.d"
 
 [daemon.lazyd.fetch]
 unit_bytes = 2097152
@@ -63,6 +64,9 @@ level = "debug"
 	if cfg.Daemon.Lazyd.LazydAddress != "/tmp/lazyd.sock" {
 		t.Fatalf("lazyd address = %q", cfg.Daemon.Lazyd.LazydAddress)
 	}
+	if cfg.Daemon.Lazyd.HostsDir != "/tmp/certs.d" {
+		t.Fatalf("lazyd hosts dir = %q", cfg.Daemon.Lazyd.HostsDir)
+	}
 	if cfg.Daemon.Lazyd.Fetch.UnitBytes != 2097152 {
 		t.Fatalf("fetch unit bytes = %d", cfg.Daemon.Lazyd.Fetch.UnitBytes)
 	}
@@ -87,6 +91,7 @@ mode = "lazyd"
 [daemon.lazyd]
 lazyd_binary = "/config/lazyd"
 lazyd_address = "/config/lazyd.sock"
+hosts_dir = "/config/certs.d"
 
 [daemon.lazyd.fetch]
 unit_bytes = 2097152
@@ -101,6 +106,7 @@ level = "debug"
 		"--config", path,
 		"--root", "/flag/root",
 		"--daemon-mode", "eager",
+		"--lazyd-hosts-dir", "/flag/certs.d",
 		"--immutable=false",
 		"--log-level", "warn",
 	}); err != nil {
@@ -134,6 +140,9 @@ level = "debug"
 	}
 	if cfg.Daemon.Lazyd.LazydBinary != "/config/lazyd" {
 		t.Fatalf("lazyd binary = %q", cfg.Daemon.Lazyd.LazydBinary)
+	}
+	if cfg.Daemon.Lazyd.HostsDir != "/flag/certs.d" {
+		t.Fatalf("lazyd hosts dir = %q", cfg.Daemon.Lazyd.HostsDir)
 	}
 	if cfg.Daemon.Lazyd.Fetch.UnitBytes != 2097152 {
 		t.Fatalf("fetch unit bytes = %d", cfg.Daemon.Lazyd.Fetch.UnitBytes)

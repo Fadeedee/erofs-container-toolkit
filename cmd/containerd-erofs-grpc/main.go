@@ -39,6 +39,7 @@ const (
 	defaultContainerdAddr = "/run/containerd/containerd.sock"
 	defaultDaemonMode     = "eager"
 	defaultLazydAddr      = "/run/lazyd/lazyd.sock"
+	defaultLazydHostsDir  = "/etc/containerd/certs.d"
 	defaultFetchUnitBytes = 1 << 20
 	defaultLogLevel       = "info"
 )
@@ -73,6 +74,7 @@ type daemonConfig struct {
 type lazydConfig struct {
 	LazydBinary  string      `toml:"lazyd_binary"`
 	LazydAddress string      `toml:"lazyd_address"`
+	HostsDir     string      `toml:"hosts_dir"`
 	Fetch        fetchConfig `toml:"fetch"`
 }
 
@@ -132,6 +134,7 @@ func registerFlags(fs *flag.FlagSet) cliFlags {
 	fs.String("daemon-mode", defaultDaemonMode, "Daemon implementation to use: eager, lazyd")
 	fs.String("lazyd-binary", "", "Path to lazyd binary when -daemon-mode=lazyd")
 	fs.String("lazyd-addr", defaultLazydAddr, "Socket path used by lazyd when -daemon-mode=lazyd")
+	fs.String("lazyd-hosts-dir", defaultLazydHostsDir, "Containerd certs.d hosts directory passed to lazyd")
 	fs.String("log-level", defaultLogLevel, "Log level: trace, debug, info, warn, error, fatal, panic")
 	fs.Bool("immutable", false, "Set IMMUTABLE_FL on EROFS layer blobs (default false for performance)")
 	return cliFlags{
@@ -152,6 +155,7 @@ func defaultServerConfig() serverConfig {
 			Mode: defaultDaemonMode,
 			Lazyd: lazydConfig{
 				LazydAddress: defaultLazydAddr,
+				HostsDir:     defaultLazydHostsDir,
 				Fetch: fetchConfig{
 					UnitBytes: defaultFetchUnitBytes,
 				},
@@ -195,6 +199,8 @@ func applyFlagOverrides(fs *flag.FlagSet, cfg *serverConfig) error {
 			cfg.Daemon.Lazyd.LazydBinary = f.Value.String()
 		case "lazyd-addr":
 			cfg.Daemon.Lazyd.LazydAddress = f.Value.String()
+		case "lazyd-hosts-dir":
+			cfg.Daemon.Lazyd.HostsDir = f.Value.String()
 		case "log-level":
 			cfg.Log.Level = f.Value.String()
 		case "immutable":
@@ -296,8 +302,9 @@ func newDaemonClient(cfg daemonConfig) (daemon.DaemonClient, error) {
 		return daemon.NewEagerDaemon(), nil
 	case "lazyd":
 		return daemon.NewLazyDaemon(daemon.LazyDaemonConfig{
-			Binary: cfg.Lazyd.LazydBinary,
-			Socket: cfg.Lazyd.LazydAddress,
+			Binary:   cfg.Lazyd.LazydBinary,
+			Socket:   cfg.Lazyd.LazydAddress,
+			HostsDir: cfg.Lazyd.HostsDir,
 			Fetch: daemon.LazyFetchConfig{
 				UnitBytes: cfg.Lazyd.Fetch.UnitBytes,
 			},
